@@ -15,7 +15,7 @@ if (command === ".dbinfo") {
 
     // TODO: Uncomment the code below to pass the first stage    
     const pageSize = new DataView(buffer.buffer, 0, buffer.byteLength).getUint16(16);
-    const noOfTables = new DataView(buffer.buffer, 0, buffer.byteLength).getUint8(103);
+    const noOfTables = new DataView(buffer.buffer, 0, buffer.byteLength).getUint16(103);
     console.log(`database page size: ${pageSize}`);
     console.log(`number of tables: ${noOfTables}`);
 
