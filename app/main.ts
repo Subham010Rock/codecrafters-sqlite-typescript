@@ -267,7 +267,7 @@ else if(command == ".tables"){
         const noOfCells= new DataView(targetTableHeaderBuffer.buffer,0,targetTableHeaderBuffer.length).getUint16(3);
         if(commandArgs[1] === 'COUNT(*)'){
             console.log(`${noOfCells}`);
-        }else if(commandArgs[1]==='name'){
+        }else {
             await consoleRowName(noOfCells,databaseFileHandler,targetTableRootPageOffset);
         }
     }
