@@ -268,10 +268,12 @@ else if(command == ".tables"){
             console.log(`${noOfCells}`);
         }else {
             // get the position of the column name we want to print.
-            const column = sql.split(",");
+            const columnsWithType = sql.substring(sql.indexOf("(")+1,sql.lastIndexOf(")"));
+            const columnsWithTypeArr = columnsWithType.split(",");
             let position  = -1;
-            for(let i = 0; i < column.length; i++){
-                if(column[i].includes(commandArgs[1])){
+            for(let i = 0; i < columnsWithTypeArr.length; i++){
+                const columnName = columnsWithTypeArr[i].split(" ")[0].trim();
+                if(columnName === commandArgs[1]){
                     position = i;
                     break;
                 }
