@@ -16,100 +16,97 @@ async function getRootPageOfTable(noOfTables:number,databaseFileHandler:any,give
     // each cell pointer is of size 2 bytes.
     // it contains the offset of the cell.
     // its size is 2*noOfTables.
-    const cellPointerArrayBuffer = new Uint8Array(noOfTables*2);
-    await databaseFileHandler.read(cellPointerArrayBuffer, 0, cellPointerArrayBuffer.length, 108);
+
+    const pageSize = 4096;
+    const pageBuffer = new Uint8Array(pageSize);
+    await databaseFileHandler.read(pageBuffer, 0, pageBuffer.length, 0);
+
+    const pageView = new DataView(pageBuffer.buffer, 0, pageBuffer.length);
+    const cellPointerArrayOffset = 108;
 
     for(let i=0;i<noOfTables;i++){
         // now i have offset of cell which can help to read the cell 
-        const cellOffset = new DataView(cellPointerArrayBuffer.buffer, 0,cellPointerArrayBuffer.length).getUint16(i*2);
-        //assuming size of record and rowid take 1 byte so at celloffset+2 we get record format
-        const recordSizeBuffer = new Uint8Array(1);
-        await databaseFileHandler.read(recordSizeBuffer,0,recordSizeBuffer.length,cellOffset);
-        const recordSize = new DataView(recordSizeBuffer.buffer,0,recordSizeBuffer.length).getUint8(0);
-        // console.log(`record size: ${recordSize}`);
-        // records are stored in record-format.
-        const record = new Uint8Array(recordSize+2);
-        await databaseFileHandler.read(record,0,record.length,cellOffset);
+        const cellOffset = pageView.getUint16(cellPointerArrayOffset + i*2);
+        // console.log(`cell offset: ${cellOffset}`);
+        let currentOffset = cellOffset;
 
-        const recordHeaderSize = new DataView(record.buffer,0,record.length).getUint8(2);
-        
-        // Serial type for sqlite_schema.type
-        // at offset 3 we have serial type for type
-        const type_serial_type = new DataView(record.buffer,0,record.length).getUint8(3);
-        const sqlite_schema_type_size = type_serial_type>=12 ? type_serial_type%2==0 ? (type_serial_type-12)/2 : (type_serial_type-13)/2 : type_serial_type;
-        // console.log(`table type serial type: ${type_serial_type}`);
-        // console.log(`table type serial size: ${sqlite_schema_type_size}`);
+        let payloadVarint = 1
+        payloadVarint = calulateByteSizeForVarint(payloadVarint,currentOffset,pageBuffer);
+        // console.log("payload varint: ",payloadVarint);
+        const payloadSize = pageView.getUint8(currentOffset);
+        // console.log("payload size: ",payloadSize);
+        currentOffset += payloadVarint;
 
-        // Serial type for sqlite_schema.name
-        // at offset 4 we have serial type for name
-        const name_serial_type = new DataView(record.buffer,0,record.length).getUint8(4);
-        const sqlite_schema_name_size = name_serial_type>=12 ? name_serial_type%2==0 ? (name_serial_type-12)/2 : (name_serial_type-13)/2 : name_serial_type;
-        // console.log(`table name serial type: ${name_serial_type}`);
-        // console.log(`table name serial size: ${sqlite_schema_name_size}`);
+        let rowidVarint = 1
+        rowidVarint = calulateByteSizeForVarint(rowidVarint,currentOffset,pageBuffer);
+        const rowid = pageView.getUint8(currentOffset);
+        currentOffset += rowidVarint;
 
-        // Serial type for sqlite_schema.tbl_name
-        // at offset 5 we have serial type for tbl_name
-        const tbl_name_serial_type = new DataView(record.buffer,0,record.length).getUint8(5);
+        let recordHeaderSizeLength = 1
+        recordHeaderSizeLength = calulateByteSizeForVarint(recordHeaderSizeLength,currentOffset,pageBuffer);
+        const recordHeaderSize = pageView.getUint8(currentOffset);
+        currentOffset += recordHeaderSizeLength;
 
-        //serial type value help to get the size of sqlite_schema.tbl_name
-        const sqlite_schema_tbl_name_size = tbl_name_serial_type>=12 ? tbl_name_serial_type%2==0 ? (tbl_name_serial_type-12)/2 : (tbl_name_serial_type-13)/2 : tbl_name_serial_type;
-        // console.log(`table name serial type: ${tbl_name_serial_type}`);
-        // console.log(`table name serial size: ${sqlite_schema_tbl_name_size}`);
+        let tableTypeVarint=1;
+        tableTypeVarint= calulateByteSizeForVarint(tableTypeVarint,currentOffset,pageBuffer);
+        const tableTypeSerialType = pageView.getUint8(currentOffset);
+        const tableTypeSize = tableTypeSerialType >= 12 ? tableTypeSerialType % 2 == 0 ? (tableTypeSerialType - 12) / 2 : (tableTypeSerialType - 13) / 2 : tableTypeSerialType;
+        currentOffset += tableTypeVarint;
 
-        //serial type for sqlite_schema.rootpage
-        const rootpage_serial_type = new DataView(record.buffer,0,record.length).getUint8(6);
-        const sqlite_schema_rootpage_size = rootpage_serial_type>=12 ? rootpage_serial_type%2==0 ? (rootpage_serial_type-12)/2 : (rootpage_serial_type-13)/2 : rootpage_serial_type;
-        // console.log(`table rootpage serial type: ${rootpage_serial_type}`);
-        // console.log(`table rootpage serial size: ${sqlite_schema_rootpage_size}`);
+        let tableNameVarint=1;
+        tableNameVarint= calulateByteSizeForVarint(tableNameVarint,currentOffset,pageBuffer);
+        const tableNameSerialType = pageView.getUint8(currentOffset);
+        const tableNameSize = tableNameSerialType >= 12 ? tableNameSerialType % 2 == 0 ? (tableNameSerialType - 12) / 2 : (tableNameSerialType - 13) / 2 : tableNameSerialType;
+        currentOffset += tableNameVarint;
 
-        //serial type for sqlite_schema.sql
-        let sql_column_Size = 1;
+        let tableTbl_NameVarint = 1;
+        tableTbl_NameVarint= calulateByteSizeForVarint(tableTbl_NameVarint,currentOffset,pageBuffer);
+        const tableTbl_NameSerialType = pageView.getUint8(currentOffset);
+        const tableTbl_NameSize = tableTbl_NameSerialType >= 12 ? tableTbl_NameSerialType % 2 == 0 ? (tableTbl_NameSerialType - 12) / 2 : (tableTbl_NameSerialType - 13) / 2 : tableTbl_NameSerialType;
+        currentOffset += tableTbl_NameVarint;
 
-        while (
-            sql_column_Size < 9 && 
-            new DataView(record.buffer, 0, record.length).getUint8(7 + sql_column_Size - 1) >= 128
-        ) {
-            sql_column_Size++;
+        let rootPageVarint=1;
+        rootPageVarint= calulateByteSizeForVarint(rootPageVarint,currentOffset,pageBuffer);
+        const rootPageSerialType = pageView.getUint8(currentOffset);
+        const rootPageSize = rootPageSerialType >= 12 ? rootPageSerialType % 2 == 0 ? (rootPageSerialType - 12) / 2 : (rootPageSerialType - 13) / 2 : rootPageSerialType;
+        currentOffset += rootPageVarint;
+        // console.log(`current offset: ${currentOffset}`);
+        let sqlVarint=1;
+        sqlVarint= calulateByteSizeForVarint(sqlVarint,currentOffset,pageBuffer);
+        let sqlSize;
+        if(sqlVarint==2){
+            const data1 = pageView.getUint8(currentOffset);
+            const data2 = pageView.getUint8(currentOffset + 1);
+            const sqlSerialType = (data1 & 0x7F) << 7 | data2;
+            sqlSize = sqlSerialType >= 12 ? sqlSerialType % 2 == 0 ? (sqlSerialType - 12) / 2 : (sqlSerialType - 13) / 2 : sqlSerialType;
+            currentOffset += sqlVarint;
         }
-        // console.log(`sql column size: ${sql_column_Size}`);
-        // 1. Read the two individual bytes
-        let byte1 = new DataView(record.buffer,0,record.length).getUint8(7);
-        let byte2 = new DataView(record.buffer,0,record.length).getUint8(8);
-
-        // 2. Drop the high-order flag and mathematically combine them
-        // (byte1 & 0x7F) isolates the 7 actual data bits of the first byte
-        // << 7 shifts those bits left into their proper position
-        // | byte2 combines them with the second byte
-        const sql_serial_type = ((byte1 & 0x7F) << 7) | byte2;
-
-        const sqlite_schema_sql_size = sql_serial_type>=12 ? sql_serial_type%2==0 ? (sql_serial_type-12)/2 : (sql_serial_type-13)/2 : sql_serial_type;
-        // console.log(`table sql serial type: ${sql_serial_type}`);
-        // console.log(`table sql serial size: ${sqlite_schema_sql_size}`);
-    
-        const tbl_name_offset = recordHeaderSize  + 2 + sqlite_schema_type_size + sqlite_schema_name_size;
-        const tableNameBuffer = new Uint8Array(sqlite_schema_tbl_name_size);
-        await databaseFileHandler.read(tableNameBuffer,0,tableNameBuffer.length,cellOffset + tbl_name_offset);
-        const tableName = new TextDecoder().decode(tableNameBuffer);
-
-        const rootPageOffset = tbl_name_offset + sqlite_schema_tbl_name_size;
-        const rootPagebuffer = new Uint8Array(1); 
-        await databaseFileHandler.read(rootPagebuffer,0,rootPagebuffer.length,cellOffset + rootPageOffset);
-        const rootPage = new DataView(rootPagebuffer.buffer,0,rootPagebuffer.length).getUint8(0);
-
-        const sqlOffset = rootPageOffset + sqlite_schema_rootpage_size;
-        const sqlBuffer = new Uint8Array(sqlite_schema_sql_size);
-        await databaseFileHandler.read(sqlBuffer,0,sqlBuffer.length,cellOffset + sqlOffset);
-        const sql = new TextDecoder().decode(sqlBuffer);
-
-        // console.log(`sql: ${sql}`);
-
-        if(tableName == givenTable){
-            return rootPage;
+        else{
+            sqlSize = pageView.getUint8(currentOffset);
+            currentOffset += sqlVarint;
         }
-}
+
+        const sqlSchemaTypeOffset = currentOffset;
+        const sqlSchemaNameOffset = sqlSchemaTypeOffset + tableTypeSize;
+        const sqlSchemaTblNameOffset = sqlSchemaNameOffset + tableNameSize;
+        const sqlSchemaRootPageOffset = sqlSchemaTblNameOffset + tableTbl_NameSize;
+        const sqlSchemaSqlOffset = sqlSchemaRootPageOffset + rootPageSize;
+
+        const tableTbl_NameBuffer = pageBuffer.slice(sqlSchemaTblNameOffset,sqlSchemaTblNameOffset + tableTbl_NameSize);
+        const tableTbl_Name = new TextDecoder().decode(tableTbl_NameBuffer);
+        // console.log(`table name: ${tableTbl_Name}`);
+
+        if(tableTbl_Name == givenTable){
+            const rootPage = pageView.getUint8(sqlSchemaRootPageOffset);
+            const sqlBuffer = pageBuffer.slice(sqlSchemaSqlOffset,sqlSchemaSqlOffset + sqlSize);
+            const sql = new TextDecoder().decode(sqlBuffer);
+            return {rootPage,sql};
+        }
+    }
+    return {};
 }
 
-async function consoleRowName(noOfRows:number, databaseFileHandler:any,targetTableRootPageOffset:number){
+async function consoleRowName(noOfRows:number, databaseFileHandler:any,targetTableRootPageOffset:number,position:number){
      // cell pointer array starts from index 108.
     // each cell pointer is of size 2 bytes.
     // it contains the offset of the cell.
@@ -159,7 +156,7 @@ async function consoleRowName(noOfRows:number, databaseFileHandler:any,targetTab
             serialTypeVarint = calulateByteSizeForVarint(serialTypeVarint,currentOffset,pageBuffer);
             let serialType = pageView.getUint8(currentOffset);
             serialType = serialType>=12 ? serialType%2==0 ? (serialType-12)/2 : (serialType-13)/2 : serialType;
-            if(i==1){
+            if(i==position){
                 nameColumnSize = serialType;
             }
             // console.log(`serial type: ${serialType}`);
@@ -206,10 +203,12 @@ else if(command == ".tables"){
     for(let i=0;i<noOfTables;i++){
         // now i have offset of cell which can help to read the cell 
         const cellOffset = new DataView(cellPointerArrayBuffer.buffer, 0,cellPointerArrayBuffer.length).getUint16(i*2);
+        // console.log(`cell offset: ${cellOffset}`);
         //assuming size of record and rowid take 1 byte so at celloffset+2 we get record format
         const recordSizeBuffer = new Uint8Array(1);
         await databaseFileHandler.read(recordSizeBuffer,0,recordSizeBuffer.length,cellOffset);
         const recordSize = new DataView(recordSizeBuffer.buffer,0,recordSizeBuffer.length).getUint8(0);
+        // console.log("record size: ",recordSize);
         // records are stored in record-format.
         const record = new Uint8Array(recordSize+2);
         await databaseFileHandler.read(record,0,record.length,cellOffset);
@@ -256,7 +255,7 @@ else if(command == ".tables"){
     const pageType = new DataView(pageHeaderBuffer.buffer, 0, pageHeaderBuffer.byteLength).getUint8(0);
     const commandArgs = command.split(" ");
     const tableName = commandArgs[3];
-    const rootPage = await getRootPageOfTable(noOfTables,databaseFileHandler,tableName);
+    const {rootPage,sql} = await getRootPageOfTable(noOfTables,databaseFileHandler,tableName);
     // now we have to rootpage of my target table and based on that i can get offset of that table page header.
     if(rootPage){
         // we take 4096 because the first page size is 4096.
@@ -268,7 +267,16 @@ else if(command == ".tables"){
         if(commandArgs[1] === 'COUNT(*)'){
             console.log(`${noOfCells}`);
         }else {
-            await consoleRowName(noOfCells,databaseFileHandler,targetTableRootPageOffset);
+            // get the position of the column name we want to print.
+            const column = sql.split(",");
+            let position  = -1;
+            for(let i = 0; i < column.length; i++){
+                if(column[i].includes(commandArgs[1])){
+                    position = i;
+                    break;
+                }
+            }
+            await consoleRowName(noOfCells,databaseFileHandler,targetTableRootPageOffset,position);
         }
     }
     await databaseFileHandler.close();
