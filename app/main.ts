@@ -285,7 +285,7 @@ else if(command == ".tables"){
         await databaseFileHandler.read(targetTableHeaderBuffer,0,targetTableHeaderBuffer.length,targetTableRootPageOffset);
         const targetTableHeaderType = new DataView(targetTableHeaderBuffer.buffer,0,targetTableHeaderBuffer.length).getUint8(0);
         const noOfCells= new DataView(targetTableHeaderBuffer.buffer,0,targetTableHeaderBuffer.length).getUint16(3);
-        if(commandArgs[1] === 'COUNT(*)'){
+        if(commandArgs[1].toLowerCase() === 'count(*)' ){
             console.log(`${noOfCells}`);
         }else {
             // get the position of the column name we want to print.
