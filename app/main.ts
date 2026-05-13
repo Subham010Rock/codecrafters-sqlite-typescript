@@ -124,7 +124,6 @@ async function consoleRowName(noOfRows:number, databaseFileHandler:any,targetTab
 
     // Find your cell pointer array offset (8 bytes after the start of a leaf page)
     const cellPointerArrayOffset = 8; 
-
     for(let i=0;i<noOfRows;i++){
         // now i have offset of cell which can help to read the cell 
         const cellOffset = pageView.getUint16(cellPointerArrayOffset + i*2);
@@ -149,8 +148,10 @@ async function consoleRowName(noOfRows:number, databaseFileHandler:any,targetTab
         // console.log(`record header size length: ${recordHeaderSizeLength}`);
         
         const recordHeaderSize = pageView.getUint8(currentOffset);
+        // console.log(`record header size: ${recordHeaderSize}`);
         currentOffset += recordHeaderSizeLength;
         let nameColumnSize=0;
+        let startOffDataOffset = currentOffset;
         for(let i=0;i<recordHeaderSize-1;i++){
             let serialTypeVarint = 1;
             serialTypeVarint = calulateByteSizeForVarint(serialTypeVarint,currentOffset,pageBuffer);
@@ -162,7 +163,27 @@ async function consoleRowName(noOfRows:number, databaseFileHandler:any,targetTab
             // console.log(`serial type: ${serialType}`);
             currentOffset += serialTypeVarint;
         }
-        const nameBuffer = pageBuffer.slice(currentOffset,currentOffset+nameColumnSize);
+
+        let dataOffset = currentOffset;
+        let stOffset = startOffDataOffset;
+        for (let i = 0; i < position; i++) {
+          let serialTypeVarint = 1;
+          serialTypeVarint = calulateByteSizeForVarint(
+            serialTypeVarint,
+        stOffset,
+        pageBuffer,
+      );
+      let serialType = pageView.getUint8(stOffset);
+      serialType =
+        serialType >= 12
+          ? serialType % 2 == 0
+            ? (serialType - 12) / 2
+            : (serialType - 13) / 2
+          : serialType;
+      dataOffset += serialType;
+      stOffset += serialTypeVarint;
+    }
+        const nameBuffer = pageBuffer.slice(dataOffset,dataOffset+nameColumnSize);
         console.log(`${new TextDecoder().decode(nameBuffer)}`);
         
     }
@@ -270,6 +291,7 @@ else if(command == ".tables"){
             // get the position of the column name we want to print.
             const columnsWithType = sql.substring(sql.indexOf("(")+1,sql.lastIndexOf(")"));
             const columnsWithTypeArr = columnsWithType.split(",");
+            // console.log(columnsWithTypeArr)
             let position  = -1;
             for(let i = 0; i < columnsWithTypeArr.length; i++){
                 const columnName = columnsWithTypeArr[i].split(" ")[0].trim();
