@@ -5,6 +5,25 @@ const args = process.argv;
 const databaseFilePath: string = args[2]
 const command: string = args[3];
 
+function consoleColumn(currentOffset:number,pageBuffer:Uint8Array,columnSize:Array<number>,position:Array<number>){
+    let columnsValue:Array<string> = [];
+    for(let i=0;i<position.length;i++){
+        let p = position[i];
+        let startOffset=currentOffset;
+        for(let j=0;j<p;j++){
+            let colSize = columnSize[j];
+            startOffset+=colSize;
+        }
+        const colunBuffer=pageBuffer.slice(startOffset,startOffset+columnSize[position[i]]);
+        const column = new TextDecoder().decode(colunBuffer);
+        columnsValue.push(column);
+    }
+    if(columnSize.length > 0){
+        console.log(columnsValue.join("|"));
+    }else{
+        console.log(columnsValue[0]);
+    }
+}
 function calulateByteSizeForVarint(size:number,cellOffset:number,pageBuffer:any){
     while (size < 9 &&  new DataView(pageBuffer.buffer, 0, pageBuffer.length).getUint8(cellOffset + size - 1) >= 128) {
             size++;
@@ -106,31 +125,8 @@ async function getRootPageOfTable(noOfTables:number,databaseFileHandler:any,give
     return {};
 }
 
-async function consoleRowName(noOfRows:number, databaseFileHandler:any,targetTableRootPageOffset:number,position:number){
-     // cell pointer array starts from index 108.
-    // each cell pointer is of size 2 bytes.
-    // it contains the offset of the cell.
-    // its size is 2*noOfTables.
-
-    // 1. Allocate ONE buffer for the entire page (assuming 4096 byte page size)
-    const pageSize = 4096; 
-    const pageBuffer = new Uint8Array(pageSize);
-
-    // 2. Read the entire page from the file into your buffer ONCE
-    await databaseFileHandler.read(pageBuffer, 0, pageSize, targetTableRootPageOffset);
-
-    // 3. Create ONE DataView to read from the entire page
-    const pageView = new DataView(pageBuffer.buffer);
-
-    // Find your cell pointer array offset (8 bytes after the start of a leaf page)
-    const cellPointerArrayOffset = 8; 
-    for(let i=0;i<noOfRows;i++){
-        // now i have offset of cell which can help to read the cell 
-        const cellOffset = pageView.getUint16(cellPointerArrayOffset + i*2);
-        // console.log(`cell offset: ${cellOffset}`);
-
-        // Set a pointer to track exactly where we are in the cell
-        let currentOffset = cellOffset;
+async function consoleRowName(cellOffset:number, pageView:DataView,pageBuffer:Uint8Array,position:Array<number>){
+    let currentOffset = cellOffset;
 
         let payloadVarint = 1;
         payloadVarint = calulateByteSizeForVarint(payloadVarint,currentOffset,pageBuffer);
@@ -150,43 +146,21 @@ async function consoleRowName(noOfRows:number, databaseFileHandler:any,targetTab
         const recordHeaderSize = pageView.getUint8(currentOffset);
         // console.log(`record header size: ${recordHeaderSize}`);
         currentOffset += recordHeaderSizeLength;
-        let nameColumnSize=0;
+        let columnSizeArray = new Array<number>();
         let startOffDataOffset = currentOffset;
         for(let i=0;i<recordHeaderSize-1;i++){
             let serialTypeVarint = 1;
+            let nameColumnSize=0;
             serialTypeVarint = calulateByteSizeForVarint(serialTypeVarint,currentOffset,pageBuffer);
             let serialType = pageView.getUint8(currentOffset);
             serialType = serialType>=12 ? serialType%2==0 ? (serialType-12)/2 : (serialType-13)/2 : serialType;
-            if(i==position){
-                nameColumnSize = serialType;
-            }
-            // console.log(`serial type: ${serialType}`);
+            nameColumnSize+=serialType;
+            columnSizeArray.push(nameColumnSize);
             currentOffset += serialTypeVarint;
         }
+        // console.log(currentOffset,columnSizeArray,position);
+        consoleColumn(currentOffset,pageBuffer,columnSizeArray,position);
 
-        let dataOffset = currentOffset;
-        let stOffset = startOffDataOffset;
-        for (let i = 0; i < position; i++) {
-          let serialTypeVarint = 1;
-          serialTypeVarint = calulateByteSizeForVarint(
-            serialTypeVarint,
-        stOffset,
-        pageBuffer,
-      );
-      let serialType = pageView.getUint8(stOffset);
-      serialType =
-        serialType >= 12
-          ? serialType % 2 == 0
-            ? (serialType - 12) / 2
-            : (serialType - 13) / 2
-          : serialType;
-      dataOffset += serialType;
-      stOffset += serialTypeVarint;
-    }
-        const nameBuffer = pageBuffer.slice(dataOffset,dataOffset+nameColumnSize);
-        console.log(`${new TextDecoder().decode(nameBuffer)}`);
-        
-    }
 }
 
 if (command === ".dbinfo") {
@@ -291,16 +265,28 @@ else if(command == ".tables"){
             // get the position of the column name we want to print.
             const columnsWithType = sql.substring(sql.indexOf("(")+1,sql.lastIndexOf(")"));
             const columnsWithTypeArr = columnsWithType.split(",");
+            let multiColumn = commandArgs[1].split(",");
             // console.log(columnsWithTypeArr)
-            let position  = -1;
+            let columnPosition  = [];
             for(let i = 0; i < columnsWithTypeArr.length; i++){
                 const columnName = columnsWithTypeArr[i].split(" ")[0].trim();
-                if(columnName === commandArgs[1]){
-                    position = i;
-                    break;
+                for(let j=0;j<multiColumn.length;j++){
+                    if(columnName === multiColumn[j].trim()){
+                        columnPosition.push(i);
+                    }
                 }
             }
-            await consoleRowName(noOfCells,databaseFileHandler,targetTableRootPageOffset,position);
+            let pageSize = 4096;
+            let pageBuffer = new Uint8Array(pageSize);
+            await databaseFileHandler.read(pageBuffer,0,pageBuffer.length,targetTableRootPageOffset);
+            const pageView = new DataView(pageBuffer.buffer,0,pageBuffer.length);
+
+            for(let i=0;i<noOfCells;i++){
+                const cellOffset = pageView.getUint16(8+i*2);
+                await consoleRowName(cellOffset,pageView,pageBuffer,columnPosition);
+            }
+            
+
         }
     }
     await databaseFileHandler.close();
