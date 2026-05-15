@@ -113,7 +113,7 @@ else if(command == ".tables"){
         const targetTableRootPageOffset = (rootPage - 1) * 4096;
         const {pageType,noOfCells} = await returnPageTypeAndCellCount(databaseFileHandler,targetTableRootPageOffset);
         if(commandArgs[1].toLowerCase() === 'count(*)' ){
-            // console.log(sql);
+            console.log(sql);
             console.log(`${noOfCells}`);
         }else {
             // get the position of the column name we want to print.

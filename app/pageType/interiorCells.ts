@@ -1,6 +1,7 @@
 import { returnPageTypeAndCellCount } from "./type";
 import { traverseLeafCellPointer } from "./leafCells";
 export async function traverseInteriorCellPointer(databaseFileHandler:any,pageOffset:number,columnPosition:Array<number>){
+    console.log(columnPosition);
     const pageBuffer = new Uint8Array(4096);
     await databaseFileHandler.read(pageBuffer,0,pageBuffer.length,pageOffset);
     const pageView = new DataView(pageBuffer.buffer,0,pageBuffer.length);
