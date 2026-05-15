@@ -104,28 +104,42 @@ else if(command == ".tables"){
     await databaseFileHandler.read(pageHeaderBuffer, 0, pageHeaderBuffer.length, 100);
     const noOfTables = new DataView(pageHeaderBuffer.buffer, 0, pageHeaderBuffer.byteLength).getUint16(3);
     const pageType = new DataView(pageHeaderBuffer.buffer, 0, pageHeaderBuffer.byteLength).getUint8(0);
-    const commandArgs = command.split(" ");
-    const tableName = commandArgs[3];
+    const commandLower = command.toLowerCase();
+    const selectIndex = commandLower.indexOf("select ");
+    const fromIndex = commandLower.indexOf(" from ");
+    
+    let tableName = "";
+    let columnsStr = "";
+    if (selectIndex !== -1 && fromIndex !== -1) {
+        columnsStr = command.substring(selectIndex + 7, fromIndex).trim();
+        const afterFrom = command.substring(fromIndex + 6).trim();
+        tableName = afterFrom.split(" ")[0];
+    } else {
+        const commandArgs = command.split(" ");
+        tableName = commandArgs[3];
+    }
+
     const {rootPage,sql} = await getRootPageOfTable(noOfTables,databaseFileHandler,tableName);
     // now we have to rootpage of my target table and based on that i can get offset of that table page header.
     if(rootPage){
         // we take 4096 because the first page size is 4096.
         const targetTableRootPageOffset = (rootPage - 1) * 4096;
         const {pageType,noOfCells} = await returnPageTypeAndCellCount(databaseFileHandler,targetTableRootPageOffset);
-        if(commandArgs[1].toLowerCase() === 'count(*)' ){
-            console.log(sql);
+        if(columnsStr.toLowerCase() === 'count(*)' ){
+            // console.log(sql);
             console.log(`${noOfCells}`);
         }else {
             // get the position of the column name we want to print.
             const columnsWithType = sql.substring(sql.indexOf("(")+1,sql.lastIndexOf(")"));
             const columnsWithTypeArr = columnsWithType.split(",");
-            let multiColumn = commandArgs[1].split(",");
+            let multiColumn = columnsStr.split(",").map(c => c.trim());
             let columnPosition  = [];
-            for(let i = 0; i < columnsWithTypeArr.length; i++){
-                const columnName = columnsWithTypeArr[i].trim().split(" ")[0].trim();
-                for(let j=0;j<multiColumn.length;j++){
-                    if(columnName === multiColumn[j].trim()){
+            for(let j=0; j<multiColumn.length; j++){
+                for(let i = 0; i < columnsWithTypeArr.length; i++){
+                    const columnName = columnsWithTypeArr[i].trim().split(" ")[0].trim();
+                    if(columnName.toLowerCase() === multiColumn[j].toLowerCase()){
                         columnPosition.push(i);
+                        break;
                     }
                 }
             }
