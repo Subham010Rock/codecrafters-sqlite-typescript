@@ -12,81 +12,6 @@ const args = process.argv;
 const databaseFilePath: string = args[2]
 const command: string = args[3];
 
-function consoleColumn(currentOffset:number,pageBuffer:Uint8Array,columnSize:Array<number>,position:Array<number>){
-    let columnsValue:Array<string> = [];
-    for(let i=0;i<position.length;i++){
-        let p = position[i];
-        let startOffset=currentOffset;
-        for(let j=0;j<p;j++){
-            let colSize = columnSize[j];
-            startOffset+=colSize;
-        }
-        const colunBuffer=pageBuffer.slice(startOffset,startOffset+columnSize[position[i]]);
-        const column = new TextDecoder().decode(colunBuffer);
-        columnsValue.push(column);
-    }
-    if(columnSize.length > 0){
-        console.log(columnsValue.join("|"));
-    }else{
-        console.log(columnsValue[0]);
-    }
-}
-
-async function consoleRowName(cellOffset:number, pageView:DataView,pageBuffer:Uint8Array,position:Array<number>,bTreePageType:number,dbFileHandler:any){
-    let currentOffset = cellOffset;
-
-    if(bTreePageType==5){
-        const pageNo = pageView.getUint32(currentOffset);
-        let rowIdVarint = 1;
-        rowIdVarint = calulateByteSizeForVarint(rowIdVarint,currentOffset+4,pageBuffer);
-        const pageOffset = (pageNo-1)*4096;
-        const pf = new Uint8Array(4096);
-        await dbFileHandler.read(pf,0,pf.length,pageOffset);
-        const pv = new DataView(pf.buffer,0,pf.length);
-        const pt = pv.getUint8(0)
-        console.log(pt);
-        await consoleRowName(pageOffset,pv,pf,position,pt,dbFileHandler);
-        console.log(pageNo);
-    }else{
-        let payloadVarint = 1;
-        payloadVarint = calulateByteSizeForVarint(payloadVarint,currentOffset,pageBuffer);
-        console.log(`payloadVarint: ${payloadVarint}`)
-        const payloadSize = pageView.getUint8(currentOffset);
-        console.log(`payloadsize: ${payloadSize}`)
-
-        currentOffset += payloadVarint;
-
-        let rowIdVarint = 1;
-        rowIdVarint = calulateByteSizeForVarint(rowIdVarint,currentOffset,pageBuffer);
-
-        currentOffset += rowIdVarint;
-
-        let recordHeaderSizeLength = 1;
-        recordHeaderSizeLength = calulateByteSizeForVarint(recordHeaderSizeLength,currentOffset,pageBuffer);
-        
-        console.log(`record header size length: ${recordHeaderSizeLength}`);
-        
-        const recordHeaderSize = pageView.getUint8(currentOffset);
-        console.log(`record header size: ${recordHeaderSize}`);
-        currentOffset += recordHeaderSizeLength;
-        let columnSizeArray = new Array<number>();
-        let startOffDataOffset = currentOffset;
-        for(let i=0;i<recordHeaderSize-1;i++){
-            let serialTypeVarint = 1;
-            let nameColumnSize=0;
-            serialTypeVarint = calulateByteSizeForVarint(serialTypeVarint,currentOffset,pageBuffer);
-            let serialType = pageView.getUint8(currentOffset);
-            serialType = serialType>=12 ? serialType%2==0 ? (serialType-12)/2 : (serialType-13)/2 : serialType;
-            nameColumnSize+=serialType;
-            columnSizeArray.push(nameColumnSize);
-            currentOffset += serialTypeVarint;
-        }
-        // console.log(currentOffset,columnSizeArray,position);
-        consoleColumn(currentOffset,pageBuffer,columnSizeArray,position);
-    }
-
-}
-
 if (command === ".dbinfo") {
     const databaseFileHandler = await open(databaseFilePath, constants.O_RDONLY);
     await dbinfo(databaseFileHandler);
@@ -107,13 +32,23 @@ else if(command == ".tables"){
     const commandLower = command.toLowerCase();
     const selectIndex = commandLower.indexOf("select ");
     const fromIndex = commandLower.indexOf(" from ");
+    const whereIndex = commandLower.indexOf(" where ");
     
     let tableName = "";
     let columnsStr = "";
+    let whereClause = "";
+    let whereClauseColumnName= "";
+    let whereClauseValue = "";
     if (selectIndex !== -1 && fromIndex !== -1) {
         columnsStr = command.substring(selectIndex + 7, fromIndex).trim();
         const afterFrom = command.substring(fromIndex + 6).trim();
         tableName = afterFrom.split(" ")[0];
+        if(whereIndex !== -1){
+            whereClause = command.substring(whereIndex + 6).trim();
+            const [colName,value] = whereClause.split("=");
+            whereClauseColumnName=colName.trim();
+            whereClauseValue=value.trim();
+        }
     } else {
         const commandArgs = command.split(" ");
         tableName = commandArgs[3];
@@ -134,6 +69,14 @@ else if(command == ".tables"){
             const columnsWithTypeArr = columnsWithType.split(",");
             let multiColumn = columnsStr.split(",").map(c => c.trim());
             let columnPosition  = [];
+            let whereClauseColumnPosition=-1;
+            for(let i=0; i<columnsWithTypeArr.length; i++){
+                const columnName = columnsWithTypeArr[i].trim().split(" ")[0].trim();
+                if(columnName.toLowerCase() === whereClauseColumnName.toLowerCase()){
+                    whereClauseColumnPosition=i;
+                    break;
+                }
+            }
             for(let j=0; j<multiColumn.length; j++){
                 for(let i = 0; i < columnsWithTypeArr.length; i++){
                     const columnName = columnsWithTypeArr[i].trim().split(" ")[0].trim();
@@ -144,27 +87,10 @@ else if(command == ".tables"){
                 }
             }
             if(pageType==13){
-                traverseLeafCellPointer(databaseFileHandler,targetTableRootPageOffset,columnPosition)
+                traverseLeafCellPointer(databaseFileHandler,targetTableRootPageOffset,columnPosition,whereClause,whereClauseColumnPosition,whereClauseValue)
             }else if(pageType==5){
-                await traverseInteriorCellPointer(databaseFileHandler,targetTableRootPageOffset,columnPosition)
+                await traverseInteriorCellPointer(databaseFileHandler,targetTableRootPageOffset,columnPosition,whereClause,whereClauseColumnPosition,whereClauseValue)
             }
-            // console.log(columnPosition)
-            // let pageSize = 4096;
-            // let pageBuffer = new Uint8Array(pageSize);
-            // await databaseFileHandler.read(pageBuffer,0,pageBuffer.length,targetTableRootPageOffset);
-            // console.log(targetTableRootPageOffset)
-            // const pageView = new DataView(pageBuffer.buffer,0,pageBuffer.length);
-            // let bTreePageOffset=8;
-            // if(targetTableHeaderType==5){
-            //     bTreePageOffset+=4;
-            // }
-            // for(let i=0;i<noOfCells;i++){
-            //     const cellOffset = pageView.getUint16(bTreePageOffset+i*2);
-            //     console.log("cell offset: ",cellOffset);
-            //     await consoleRowName(cellOffset,pageView,pageBuffer,columnPosition,targetTableHeaderType,databaseFileHandler);
-            // }
-            
-
         }
     }
     await databaseFileHandler.close();

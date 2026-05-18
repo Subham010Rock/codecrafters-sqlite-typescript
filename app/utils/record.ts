@@ -1,11 +1,41 @@
 import { calulateByteSizeForVarint } from "./varint";
 
-function consoleColumn(currentOffset:number,pageBuffer:Uint8Array,columnSize:Array<number>,position:Array<number>){
+function consoleColumn(currentOffset:number,pageBuffer:Uint8Array,columnSize:Array<number>,position:Array<number>,whereClause:string,whereClauseColumnPosition:number,whereClauseValue:string){
     let columnsValue:Array<string> = [];
-    for(let i=0;i<position.length;i++){
-        let p = position[i];
-        let startOffset=currentOffset;
-        for(let j=0;j<p;j++){
+    if(whereClauseColumnPosition!=-1){
+        let startOffset = currentOffset;
+        for(let i=0;i<whereClauseColumnPosition;i++){
+            let colSize = columnSize[i];
+            startOffset+=colSize;
+        }
+        const colunBuffer=pageBuffer.slice(startOffset,startOffset+columnSize[whereClauseColumnPosition]);
+        const column = new TextDecoder().decode(colunBuffer);
+        // reomve whitespace from column
+        const cleanWhereClauseValue = whereClauseValue.replace(/^['"]|['"]$/g, '');
+        if(column === cleanWhereClauseValue){
+            for(let i=0;i<position.length;i++){
+                let p = position[i];
+                let startOffset=currentOffset;
+                for(let j=0;j<p;j++){
+                    let colSize = columnSize[j];
+                    startOffset+=colSize;
+                }
+                const colunBuffer=pageBuffer.slice(startOffset,startOffset+columnSize[position[i]]);
+                const column = new TextDecoder().decode(colunBuffer);
+                columnsValue.push(column);
+            }
+            if(columnSize.length > 0){
+                console.log(columnsValue.join("|"));
+            }else{
+                console.log(columnsValue[0]);
+            }
+        }
+    }
+    else{
+        for(let i=0;i<position.length;i++){
+            let p = position[i];
+            let startOffset=currentOffset;
+            for(let j=0;j<p;j++){
             let colSize = columnSize[j];
             startOffset+=colSize;
         }
@@ -19,7 +49,8 @@ function consoleColumn(currentOffset:number,pageBuffer:Uint8Array,columnSize:Arr
         console.log(columnsValue[0]);
     }
 }
-export async function consoleRowName(cellOffset:number, pageView:DataView,pageBuffer:Uint8Array,position:Array<number>,dbFileHandler:any){
+}
+export async function consoleRowName(cellOffset:number, pageView:DataView,pageBuffer:Uint8Array,position:Array<number>,dbFileHandler:any,whereClause:string,whereClauseColumnPosition:number,whereClauseValue:string){
     let currentOffset = cellOffset;
     // console.log(`cellOffset: ${cellOffset}`)
 
@@ -70,7 +101,7 @@ export async function consoleRowName(cellOffset:number, pageView:DataView,pageBu
             currentOffset += serialTypeVarint;
         }
         // console.log(currentOffset,columnSizeArray,position);
-        consoleColumn(currentOffset,pageBuffer,columnSizeArray,position);
+        consoleColumn(currentOffset,pageBuffer,columnSizeArray,position,whereClause,whereClauseColumnPosition,whereClauseValue);
     // } 
 
 }

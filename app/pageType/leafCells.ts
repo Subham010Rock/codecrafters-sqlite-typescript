@@ -1,6 +1,6 @@
 import { consoleRowName } from "../utils/record";
 
-export async function traverseLeafCellPointer(databaseFileHandler:any,pageOffset:number,columnPosition:Array<number>){
+export async function traverseLeafCellPointer(databaseFileHandler:any,pageOffset:number,columnPosition:Array<number>,whereClause:string,whereClauseColumnPosition:number,whereClauseValue:string){
     // leafCell type page header is of 8 byte
     const pageBuffer = new Uint8Array(4096);
     await databaseFileHandler.read(pageBuffer,0,pageBuffer.length,pageOffset);
@@ -9,6 +9,6 @@ export async function traverseLeafCellPointer(databaseFileHandler:any,pageOffset
     // console.log(cellPointerArrayLength);
     for(let i=0;i<cellPointerArrayLength;i++){
         const cellOffset = pageView.getUint16(8+(i*2));
-        consoleRowName(cellOffset,pageView,pageBuffer,columnPosition,databaseFileHandler);
+        consoleRowName(cellOffset,pageView,pageBuffer,columnPosition,databaseFileHandler,whereClause,whereClauseColumnPosition,whereClauseValue);
     }
 }
