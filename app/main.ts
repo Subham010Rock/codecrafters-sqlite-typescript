@@ -70,6 +70,7 @@ else if(command == ".tables"){
             let multiColumn = columnsStr.split(",").map(c => c.trim());
             let columnPosition  = [];
             let whereClauseColumnPosition=-1;
+            let isRowId = false;
             for(let i=0; i<columnsWithTypeArr.length; i++){
                 const columnName = columnsWithTypeArr[i].trim().split(" ")[0].trim();
                 if(columnName.toLowerCase() === whereClauseColumnName.toLowerCase()){
@@ -81,15 +82,20 @@ else if(command == ".tables"){
                 for(let i = 0; i < columnsWithTypeArr.length; i++){
                     const columnName = columnsWithTypeArr[i].trim().split(" ")[0].trim();
                     if(columnName.toLowerCase() === multiColumn[j].toLowerCase()){
-                        columnPosition.push(i);
-                        break;
+                        if(multiColumn[j].toLowerCase()=='id'){
+                            isRowId = true;
+                            break;
+                        }else{
+                            columnPosition.push(i);
+                            break;
+                        }
                     }
                 }
             }
             if(pageType==13){
-                traverseLeafCellPointer(databaseFileHandler,targetTableRootPageOffset,columnPosition,whereClause,whereClauseColumnPosition,whereClauseValue)
+                traverseLeafCellPointer(databaseFileHandler,targetTableRootPageOffset,columnPosition,whereClause,whereClauseColumnPosition,whereClauseValue,isRowId)
             }else if(pageType==5){
-                await traverseInteriorCellPointer(databaseFileHandler,targetTableRootPageOffset,columnPosition,whereClause,whereClauseColumnPosition,whereClauseValue)
+                await traverseInteriorCellPointer(databaseFileHandler,targetTableRootPageOffset,columnPosition,whereClause,whereClauseColumnPosition,whereClauseValue,isRowId)
             }
         }
     }

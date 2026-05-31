@@ -1,7 +1,6 @@
 import { returnPageTypeAndCellCount } from "./type";
 import { traverseLeafCellPointer } from "./leafCells";
-export async function traverseInteriorCellPointer(databaseFileHandler:any,pageOffset:number,columnPosition:Array<number>,whereClause:string,whereClauseColumnPosition:number,whereClauseValue:string){
-    console.log(columnPosition);
+export async function traverseInteriorCellPointer(databaseFileHandler:any,pageOffset:number,columnPosition:Array<number>,whereClause:string,whereClauseColumnPosition:number,whereClauseValue:string,isRowId:boolean){
     const pageBuffer = new Uint8Array(4096);
     await databaseFileHandler.read(pageBuffer,0,pageBuffer.length,pageOffset);
     const pageView = new DataView(pageBuffer.buffer,0,pageBuffer.length);
@@ -15,9 +14,9 @@ export async function traverseInteriorCellPointer(databaseFileHandler:any,pageOf
         const {pageType,noOfCells} = await returnPageTypeAndCellCount(databaseFileHandler,pageOffset);
         // console.log(`page type: ${pageType}, cell count ${noOfCells}`);
         if(pageType==13){
-            traverseLeafCellPointer(databaseFileHandler,pageOffset,columnPosition,whereClause,whereClauseColumnPosition,whereClauseValue)
+            traverseLeafCellPointer(databaseFileHandler,pageOffset,columnPosition,whereClause,whereClauseColumnPosition,whereClauseValue,isRowId)
         }else if(pageType==5){
-            await traverseInteriorCellPointer(databaseFileHandler,pageOffset,columnPosition,whereClause,whereClauseColumnPosition,whereClauseValue)
+            await traverseInteriorCellPointer(databaseFileHandler,pageOffset,columnPosition,whereClause,whereClauseColumnPosition,whereClauseValue,isRowId)
         }
     }
 }

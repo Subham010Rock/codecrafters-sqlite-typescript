@@ -1,6 +1,6 @@
-import { calulateByteSizeForVarint } from "./varint";
+import { calulateByteSizeForVarint, getVarIntValue } from "./varint";
 
-function consoleColumn(currentOffset:number,pageBuffer:Uint8Array,columnSize:Array<number>,position:Array<number>,whereClause:string,whereClauseColumnPosition:number,whereClauseValue:string){
+function consoleColumn(currentOffset:number,pageBuffer:Uint8Array,columnSize:Array<number>,position:Array<number>,whereClause:string,whereClauseColumnPosition:number,whereClauseValue:string,rowId:number,isRowId:boolean){
     let columnsValue:Array<string> = [];
     if(whereClauseColumnPosition!=-1){
         let startOffset = currentOffset;
@@ -13,6 +13,9 @@ function consoleColumn(currentOffset:number,pageBuffer:Uint8Array,columnSize:Arr
         // reomve whitespace from column
         const cleanWhereClauseValue = whereClauseValue.replace(/^['"]|['"]$/g, '');
         if(column === cleanWhereClauseValue){
+            if(isRowId){
+                columnsValue.push(rowId.toString());
+            }
             for(let i=0;i<position.length;i++){
                 let p = position[i];
                 let startOffset=currentOffset;
@@ -20,6 +23,8 @@ function consoleColumn(currentOffset:number,pageBuffer:Uint8Array,columnSize:Arr
                     let colSize = columnSize[j];
                     startOffset+=colSize;
                 }
+                //console the row id
+
                 const colunBuffer=pageBuffer.slice(startOffset,startOffset+columnSize[position[i]]);
                 const column = new TextDecoder().decode(colunBuffer);
                 columnsValue.push(column);
@@ -50,7 +55,7 @@ function consoleColumn(currentOffset:number,pageBuffer:Uint8Array,columnSize:Arr
     }
 }
 }
-export async function consoleRowName(cellOffset:number, pageView:DataView,pageBuffer:Uint8Array,position:Array<number>,dbFileHandler:any,whereClause:string,whereClauseColumnPosition:number,whereClauseValue:string){
+export async function consoleRowName(cellOffset:number, pageView:DataView,pageBuffer:Uint8Array,position:Array<number>,dbFileHandler:any,whereClause:string,whereClauseColumnPosition:number,whereClauseValue:string,isRowId:boolean){
     let currentOffset = cellOffset;
     // console.log(`cellOffset: ${cellOffset}`)
 
@@ -77,9 +82,8 @@ export async function consoleRowName(cellOffset:number, pageView:DataView,pageBu
 
         let rowIdVarint = 1;
         rowIdVarint = calulateByteSizeForVarint(rowIdVarint,currentOffset,pageBuffer);
-
+        const rowId = getVarIntValue(0,pageView,currentOffset);
         currentOffset += rowIdVarint;
-
         let recordHeaderSizeLength = 1;
         recordHeaderSizeLength = calulateByteSizeForVarint(recordHeaderSizeLength,currentOffset,pageBuffer);
         
@@ -101,7 +105,7 @@ export async function consoleRowName(cellOffset:number, pageView:DataView,pageBu
             currentOffset += serialTypeVarint;
         }
         // console.log(currentOffset,columnSizeArray,position);
-        consoleColumn(currentOffset,pageBuffer,columnSizeArray,position,whereClause,whereClauseColumnPosition,whereClauseValue);
+        consoleColumn(currentOffset,pageBuffer,columnSizeArray,position,whereClause,whereClauseColumnPosition,whereClauseValue,rowId,isRowId);
     // } 
 
 }
